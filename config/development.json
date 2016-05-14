@@ -1,0 +1,20 @@
+{
+    "gcloud": {
+        "projectId": "ase16-1255"
+    },
+
+    "will": {
+        "instanceGroupName": "will-nodes",
+        "instanceGroupZone": "europe-west1-d"
+    },
+
+    "autoscale": {
+        "minimumNumberOfInstances": 1,
+        "maximumNumberOfInstances": 8,
+        "loadCheckInterval": 60
+    },
+
+    "log": {
+        "level": "info"
+    }
+}
