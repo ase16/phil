@@ -18,12 +18,17 @@ function getAvailableVMs(callback) {
         if (!err) {
             cloud.listVMsOfInstanceGroup(will.instanceGroupZone, will.instanceGroupName, function(err, res) {
                 if (!err) {
-					var vms = res.managedInstances.filter(function(vm) {
-						return (vm.hasOwnProperty('instanceStatus') && vm.instanceStatus === 'RUNNING');
-					}).map(function(vm) {
-						return vm.name;
-					});
-					return callback(null, vms);
+					if (res.hasOwnProperty('managedInstances')) {
+						var vmNames = res.managedInstances.filter(function(vm) {
+							return (vm.hasOwnProperty('instanceStatus') && vm.instanceStatus === 'RUNNING');
+						}).map(function(vm) {
+							return vm.name;
+						});
+						return callback(null, vmNames);
+					}
+					else {
+						return callback(null, []);
+					}
                 }
                 else {
 					return callback(err);
@@ -84,11 +89,11 @@ function calculateNewSizeOfInstanceGroup(vms, callback) {
 			return callback(null, adjustedNewSize);
 		}
 		else {
-			return callback(new Error('Average load of the VMs is 0, which indicates that there are no VMs at all'));
+			return callback('Average load of the VMs is 0, which indicates that jazz is not delivering any new tweets that the will-nodes could analyze');
 		}
 	}
 	else {
-		return callback(new Error('The calculateNewSizeOfInstanceGroup method needs as input parameter an array of vms that is not empty!'));
+		return callback('The calculateNewSizeOfInstanceGroup method needs as input parameter an array of vms that is not empty!');
 	}
 }
 
@@ -106,21 +111,25 @@ function autoscaleVMs() {
 								}
 								else {
 									log.error(err);
+									setTimeout(autoscaleVMs, LOAD_CHECK_INTERVAL * 1000);
 								}
 							});
 						}
 						else {
 							log.error(err);
+							setTimeout(autoscaleVMs, LOAD_CHECK_INTERVAL * 1000);
 						}
 					});
 				}
 				else {
 					log.error(err);
+					setTimeout(autoscaleVMs, LOAD_CHECK_INTERVAL * 1000);
 				}
 			});
 		}
 		else {
 			log.error(err);
+			setTimeout(autoscaleVMs, LOAD_CHECK_INTERVAL * 1000);
 		}
 	});
 }

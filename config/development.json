@@ -10,8 +10,8 @@
 
     "autoscale": {
         "minimumNumberOfInstances": 1,
-        "maximumNumberOfInstances": 8,
-        "loadCheckInterval": 60
+        "maximumNumberOfInstances": 6,
+        "loadCheckInterval": 30
     },
 
     "log": {

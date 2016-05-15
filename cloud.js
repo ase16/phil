@@ -118,7 +118,7 @@ Cloud.prototype.resizeInstanceGroup = function(zone, instanceGroup, newSize, cal
         size: newSize
     };
     this.compute.instanceGroupManagers.resize(params, function(err, res) {      // instanceGroupManagers.resize --> https://cloud.google.com/compute/docs/reference/latest/instanceGroupManagers/resize
-        log.debug("Cloud.resizeWorkerGroup: ", err, res);
+        log.debug("Cloud.resizeInstanceGroup: ", err, res);
         callback(err, res);
     });
 };
