@@ -1,6 +1,7 @@
 'use strict';
 
 const config = require('config');
+var _ = require('underscore');
 const log = require('winston');
 log.level = config.get('log.level');
 
@@ -8,6 +9,8 @@ let datastore;
 let cgeConfig = config.get("gcloud");
 let will = config.get("will");
 let autoscale = config.get("autoscale");
+let UPPER_BOUND_USAGE = autoscale.upperBoundUsage;
+let LOWER_BOUND_USAGE = autoscale.lowerBoundUsage;
 let MINIMUM_NUMBER_OF_INSTANCES = autoscale.minimumNumberOfInstances;
 let MAXIMUM_NUMBER_OF_INSTANCES = autoscale.maximumNumberOfInstances;
 let LOAD_CHECK_INTERVAL = autoscale.loadCheckInterval;
@@ -24,6 +27,7 @@ function getAvailableVMs(callback) {
 						}).map(function(vm) {
 							return vm.name;
 						});
+						log.debug('will vms running = ', vmNames);
 						return callback(null, vmNames);
 					}
 					else {
@@ -39,6 +43,30 @@ function getAvailableVMs(callback) {
 			return callback(err);
         }
     });
+}
+
+function filterPausedVMs(vmNames, callback) {
+	datastore.getStateOfVMs(vmNames, function(err, vms) {
+		if (!err) {
+			log.debug('vms from WillState = ', vms);
+
+			var pausedVMNames = vms.filter(function(vm) {
+				return (vm.data.hasOwnProperty('paused') && vm.data.paused != false);
+			}).map(function(vm) {
+				return vm.key.name;
+			});
+
+			log.debug('vms from WillState that are paused = ', pausedVMNames);
+			var activeVMNames = _.difference(vmNames, pausedVMNames);
+			var numberOfPausedVMs = vmNames.length - activeVMNames.length;
+			log.debug('vms from WillState that are active = ', activeVMNames);
+			log.debug('number of vms that are paused = ', numberOfPausedVMs);
+			return callback(null, activeVMNames, numberOfPausedVMs);
+		}
+		else {
+			return callback(err);
+		}
+	});
 }
 
 function resizeVMs(newSize, callback) {
@@ -60,24 +88,31 @@ function resizeVMs(newSize, callback) {
 	});
 }
 
-function calculateNewSizeOfInstanceGroup(vms, callback) {
+// Used a simple approach to balance out load spikes. The decision whether to resize the instanceGroup always averages out with the old average load value.
+let oldAverageLoadRelative = 0;
+function calculateNewSizeOfInstanceGroup(vms, numberOfPausedVMs, callback) {
 	if (vms.length > 0) {
 		var totalLoad = 0;
 
 		for(let i = 0; i < vms.length; i++) {
+			log.debug("VM with key = " + vms[i].key.name + " has load = " + vms[i].data.load);
 			totalLoad += vms[i].data.load;
 		}
 
 		var averageLoadAbsolute = totalLoad / vms.length;
 		var averageLoadRelative = averageLoadAbsolute / MAX_BATCH_OPERATIONS;
+		var balancedAverageLoadRelative = (oldAverageLoadRelative + averageLoadRelative) / 2;
+		oldAverageLoadRelative = averageLoadRelative;
 
 		log.debug("The totalLoad of the VMs is = ", totalLoad);
 		log.debug("The averageLoadAbsolute of the VMs is = ", averageLoadAbsolute);
 		log.debug("The averageLoadRelative of the VMs is = ", averageLoadRelative);
+		log.debug("The oldAverageLoadRelative of the VMs is = ", oldAverageLoadRelative);
+		log.debug("The balancedAverageLoadRelative of the VMs is = ", balancedAverageLoadRelative);
 
-		if (averageLoadRelative > 0) {
-			var sizeModification = ((averageLoadRelative > 0.9) ? 1 : (averageLoadRelative < 0.5) ? -1 : 0);
-			var newSize = vms.length + sizeModification;
+		if (balancedAverageLoadRelative > 0) {
+			var sizeModification = ((balancedAverageLoadRelative > UPPER_BOUND_USAGE) ? 1 : (balancedAverageLoadRelative < LOWER_BOUND_USAGE) ? -1 : 0);
+			var newSize = vms.length + sizeModification + numberOfPausedVMs;
 			var adjustedNewSize = (newSize <= MINIMUM_NUMBER_OF_INSTANCES ? MINIMUM_NUMBER_OF_INSTANCES : newSize);
 			adjustedNewSize = (newSize >= MAXIMUM_NUMBER_OF_INSTANCES ? MAXIMUM_NUMBER_OF_INSTANCES : adjustedNewSize);
 
@@ -101,13 +136,21 @@ function calculateNewSizeOfInstanceGroup(vms, callback) {
 function autoscaleVMs() {
 	getAvailableVMs(function(err, vmNames) {
 		if (!err) {
-			datastore.getVMLoads(vmNames, function(err, vms) {
+			filterPausedVMs(vmNames, function (err, activeVMNames, numberOfPausedVMs) {
 				if (!err) {
-					calculateNewSizeOfInstanceGroup(vms, function(err, newSize) {
+					datastore.getVMLoads(activeVMNames, function(err, vms) {
 						if (!err) {
-							resizeVMs(newSize, function(err) {
+							calculateNewSizeOfInstanceGroup(vms, numberOfPausedVMs, function(err, newSize) {
 								if (!err) {
-									setTimeout(autoscaleVMs, LOAD_CHECK_INTERVAL * 1000);
+									resizeVMs(newSize, function(err) {
+										if (!err) {
+											setTimeout(autoscaleVMs, LOAD_CHECK_INTERVAL * 1000);
+										}
+										else {
+											log.error(err);
+											setTimeout(autoscaleVMs, LOAD_CHECK_INTERVAL * 1000);
+										}
+									});
 								}
 								else {
 									log.error(err);

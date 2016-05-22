@@ -11,6 +11,8 @@
     "autoscale": {
         "minimumNumberOfInstances": 1,
         "maximumNumberOfInstances": 6,
+        "lowerBoundUsage": 0.3,
+        "upperBoundUsage": 0.9,
         "loadCheckInterval": 30
     },
 

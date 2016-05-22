@@ -50,7 +50,7 @@ const db = {
 				});
 			}
 
-			// From (all of) the entities we then only need the entities that reflect the load of vms that are running
+			// From (all of) the entities we then only need the entities that reflect the load of vms that are running (or paused)
 
 			log.debug("entities = ", entities);
 			var validEntities = entities.filter(function(e) {
@@ -63,9 +63,32 @@ const db = {
 				return callback(null, validEntities);
 			}
 			else {
-				return callback('The kind "VMLoad" does not seem to have entities that present the load of currently running vms!');
+				return callback('The kind "VMLoad" does not seem to have entities that present the load of currently running & active vms!');
 			}
 		});
+	},
+
+	getStateOfVMs: function(vmNames, callback) {
+		if (!isConnected()) {
+			return callback("Datastore is not connected", null);
+		}
+
+		/*
+		// Note: Somehow that didn't work, but the query below it and the algorithm that follows in the callback correct stuff properly
+		var keys = [];
+		vmNames.forEach(function(vmName) {
+			keys.push(['WillState', vmName]);
+		});
+		log.info(keys);
+		datastore.get(keys, callback);
+		*/
+
+		var query = datastore
+			.createQuery('WillState')
+			.autoPaginate(false)
+			.filter('paused', '=', true)
+			.limit(500);
+		datastore.runQuery(query, callback);
 	}
 };
 
