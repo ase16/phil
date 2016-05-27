@@ -74,7 +74,7 @@ function resizeVMs(newSize, callback) {
 		if (!err) {
 			cloud.resizeInstanceGroup(will.instanceGroupZone, will.instanceGroupName, newSize, function(err, res) {
 				if (!err) {
-					log.info('Succesfully requested adjustment of the instance group size');
+					log.info('Succesfully requested adjustment of the instance group size: ' + newSize);
 					callback(null, res);
 				}
 				else {
